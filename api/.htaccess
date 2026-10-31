@@ -1,0 +1,3 @@
+<FilesMatch "^(?:domain|store)\.php$">
+  Require all denied
+</FilesMatch>

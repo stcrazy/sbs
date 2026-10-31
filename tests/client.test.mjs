@@ -1,0 +1,7 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizePhone,displayPhone,iphoneSmsLink} from '../src/text-links.ts';
+import {balance,winner} from '../src/pool-model.ts';
+test('phone formatting accepts local and international phone numbers safely',()=>{assert.equal(normalizePhone('(415) 555-0123'),'+14155550123');assert.equal(normalizePhone('1-415-555-0123'),'+14155550123');assert.equal(normalizePhone('+44 20 7946 0958'),'+442079460958');assert.equal(displayPhone('+14155550123'),'(415) 555-0123');assert.equal(normalizePhone(''),'');for(const input of ['4155550123&body=Bad','+14155550123,+14155550124','abc','123'])assert.throws(()=>normalizePhone(input));});
+test('iPhone links contain exactly one recipient and preserve encoded message text',()=>{const text='Hello!\nA & B + 50% 🎉\nhttps://example.com/?a=1&b=2',link=iphoneSmsLink('4155550123',text);assert.ok(link.startsWith('sms:+14155550123&body='));assert.equal(decodeURIComponent(link.split('&body=')[1]),text);assert.equal(link.split('&').length,2);});
+test('client ledger totals match the owner and score display uses the last digit',()=>{const p={ledger:[{playerId:'a',credits:3},{playerId:'a',credits:-1},{playerId:'b',credits:5}],rows:[0,1,2,3,4,5,6,7,8,9],cols:[0,1,2,3,4,5,6,7,8,9],squares:{47:{label:'Winner'}}};assert.equal(balance(p,'a'),2);assert.equal(winner(p,{row:24,col:17}).index,47);assert.equal(winner(p,{row:24,col:17}).square.label,'Winner');});
