@@ -41,11 +41,11 @@ export async function createInvitation(playerId: string, phone: string, previous
   };
   return { token, grant };
 }
-export function invitationUrl(origin: string, token: string): string {
+export function invitationUrl(origin: string, token: string, game='2026_01'): string {
   const url = new URL(origin);
   if(!/^https?:$/.test(url.protocol)) throw new Error('Use an HTTP or HTTPS site address.');
-  // A fragment keeps the invitation secret out of HTTP requests and referrer headers.
-  url.hash = new URLSearchParams({ invite: token }).toString();
+  if(!/^\d{4}_\d{2}$/.test(game)||game.endsWith('_00'))throw new Error('Invalid game code.');
+  url.searchParams.set('game',game);url.searchParams.set('login',token);url.hash='';
   return url.toString();
 }
 export async function verifyInvitation(grant: InvitationGrant | null, token: string, phone: string, now = Date.now()): Promise<boolean> {

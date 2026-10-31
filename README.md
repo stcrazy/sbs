@@ -1,6 +1,6 @@
 # Super Bowl Squares · thetrenhailes.com/sbs
 
-A private, phone-based football pool for Hostinger PHP/MySQL hosting. Players open an individual invitation that the organizer texts manually, enter their phone number, and stay signed in on that device. They need no ChatGPT account, email address, password, or automated verification text. The organizer has a separate password-protected dashboard.
+A private, phone-based football pool for Hostinger PHP/MySQL hosting, supporting multiple independently managed games. Players open an individual game invitation that the organizer texts manually, enter their phone number, and stay signed in on that device. They need no ChatGPT account, email address, password, or automated verification text. The organizer has a separate password-protected dashboard.
 
 ## Deployment status
 
@@ -33,7 +33,30 @@ In **Organizer → Players & ledger**, enter a player's name and phone number; e
 
 Click **Create invite**, then **Text invitation** on your iPhone, or **Copy invite** and paste it into Messages. Review the number and message and tap Send yourself. Private links expire after 30 days for new sign-ins. A successful sign-in lasts up to 14 days on that device. Keep invitation links private: possession of the link plus the matching phone number grants access. This is not carrier-based phone verification.
 
-Creating or replacing an invitation revokes that player's previous links and sessions. Changing a player's phone number also revokes existing access; create and text a new invitation afterward. Invitation tokens and session secrets are stored only as hashes in the database. Link secrets use a URL fragment, which is removed from the address bar after the page captures it, keeping them out of normal HTTP requests/referrer headers.
+Creating or replacing an invitation revokes that player's previous links and sessions for the selected game. Changing a player's phone number also revokes their access to that game; create and text a new invitation afterward. Invitation tokens and session secrets are stored only as hashes in the database. New links use `?game=2026_01&login=PRIVATE_KEY`. The interface removes `login` from the address bar after capturing it and sends no referrer header. Query links can still appear in web-server logs or browser history, so keep them private. Older `#invite=...` links remain supported for the original game.
+
+## Multiple games and direct links
+
+Open `/sbs/` to choose among games signed into on this device. Organizers see every game; players see only games for which this browser has a valid session. Open another private invitation to add a game to the player's selection screen. The **Games** link on each board returns to the selector.
+
+The organizer can go directly to `/sbs/?admin=1` to sign in, even while a player session is active. From the selector, use **Create game** and choose its display name, year, and optional date. Codes are allocated sequentially within that year: `2026_01`, `2026_02`, and so on. The display name may be anything the organizer chooses. Rename it under that game's **Organizer → Pool setup & logos**; its code and existing links remain unchanged.
+
+Examples:
+
+```text
+Game selection: https://thetrenhailes.com/sbs/
+Organizer login: https://thetrenhailes.com/sbs/?admin=1
+Game board:     https://thetrenhailes.com/sbs/?game=2026_01
+Player invite:  https://thetrenhailes.com/sbs/?game=2026_01&login=PRIVATE_KEY
+```
+
+`PRIVATE_KEY` is a generated random invitation secret, not a phone number. The player still enters their invited phone number. A link for one game cannot authenticate to another game, even if the same phone number appears in both rosters. Each game has a separate session cookie, allowing a player to switch among games already signed into without mixing balances.
+
+Each game has its own roster, ledger, credits, square owners/artwork, team and event logos, rules, price, payout percentages, notices, row/column draw, scores, winners, and images. Creating a game may copy contact details from another game, but never payments, credit balances, squares, invitations, scores, or uploaded artwork. Fresh invitations must be created for the new game.
+
+Use **Archive** on a game card to make its board and ledger read-only. Archived games can still be viewed and printed. **Restore** reopens editing. The selector hides archived games until **Show archived** is checked; no records are deleted.
+
+The multi-game migration copies the original standalone pool into `2026_01`, preserving its records, images, and valid player sessions. Legacy tables remain intact. This migration is transactional and runs only once. Back up the database before updating an existing production installation.
 
 In **Organizer → Text players**, write one message, select recipients, then tap each individual Text button. Each link contains one recipient. The site does not automatically send, charge for, or track delivery of texts. Message drafts are retained in that browser tab. Safari/iPhone prefilled-body support requires an actual phone check; Copy Message is the fallback.
 
@@ -65,7 +88,7 @@ For a local API preview, create a private, ignored config with `site_url` `http:
 php -S 127.0.0.1:8091 scripts/dev-router.php
 ```
 
-`tests/http-standalone.mjs` uses only that loopback endpoint and writes synthetic data. Its expected test setup key/password are deliberately local-only and are never production defaults. It covers setup, admin login, phone/link validation, contact privacy, origin checks, concurrent purchases, invitation rotation, changed phone numbers, and logout.
+`tests/http-standalone.mjs` and `tests/http-multigame.mjs` use only that loopback endpoint and write synthetic data. Their expected test setup key/password are deliberately local-only and are never production defaults. The multi-game checks cover stable codes, copied contacts, game-specific links and cookies, independent balances and squares, image separation, concurrent purchases, renaming, archive/restore, scoped revocation, and logout. `php tests/migration.php` requires PDO SQLite and verifies preservation of an existing single-game installation using a disposable fixture under `.local/`.
 
 ## Access and data
 

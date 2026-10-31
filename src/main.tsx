@@ -1,4 +1,4 @@
 import {createRoot} from 'react-dom/client';
-import PoolApp from './pool-app';
+import Games from './games';
 import './club.css';
-createRoot(document.getElementById('root')!).render(<PoolApp/>);
+createRoot(document.getElementById('root')!).render(<Games/>);

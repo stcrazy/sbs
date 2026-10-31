@@ -31,8 +31,8 @@ test('sessions are device secrets, expire, and cannot cross player identities',a
   assert.equal(await verifyPlayerSession(session,b.grant,token,now),false);
   assert.equal(await verifyPlayerSession(session,a.grant,a.token,now),false);
 });
-test('private invitation secrets live in the fragment, not request query parameters',async()=>{
+test('private links include the stable game code and random login key',async()=>{
   const {token}=await createInvitation('a','4155550123',0,now);
   const link=new URL(invitationUrl('https://thetrenhailes.com/sbs/',token));
-  assert.equal(link.pathname,'/sbs/');assert.equal(link.search,'');assert.equal(new URLSearchParams(link.hash.slice(1)).get('invite'),token);
+  assert.equal(link.pathname,'/sbs/');assert.equal(link.searchParams.get('game'),'2026_01');assert.equal(link.searchParams.get('login'),token);assert.equal(link.hash,'');
 });

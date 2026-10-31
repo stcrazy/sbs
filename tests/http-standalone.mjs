@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 const root='http://127.0.0.1:8091',base=root+'/sbs/api';
 const setupKey='local-test-only-key-012345678901234567890123';
 const admin={cookie:''},player={cookie:''},other={cookie:''};
-async function call(who,route,body,origin=root){const r=await fetch(base+route,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json',Origin:origin}:{}),Cookie:who.cookie},...(body?{body:JSON.stringify(body)}:{})});const set=r.headers.getSetCookie();if(set.length)who.cookie=set.map(v=>v.split(';')[0]).join('; ');let data;const text=await r.text();try{data=JSON.parse(text)}catch{throw Error('Unexpected response '+r.status+': '+text.slice(0,100))}return {status:r.status,data,headers:r.headers};}
+async function call(who,route,body,origin=root){const r=await fetch(base+route,{method:body?'POST':'GET',headers:{...(body?{'Content-Type':'application/json',Origin:origin}:{}),Cookie:who.cookie},...(body?{body:JSON.stringify(body)}:{})});const set=r.headers.getSetCookie();if(set.length){const jar=new Map(who.cookie.split('; ').filter(Boolean).map(v=>v.split('=')));for(const v of set){const [key,value]=v.split(';')[0].split('=');if(value)jar.set(key,value);else jar.delete(key)}who.cookie=[...jar].map(v=>v.join('=')).join('; ')}let data;const text=await r.text();try{data=JSON.parse(text)}catch{throw Error('Unexpected response '+r.status+': '+text.slice(0,100))}return {status:r.status,data,headers:r.headers};}
 assert.equal((await call(other,'/pool')).status,401);
 assert.equal((await call(other,'/auth',{action:'admin',password:'bad'},'https://other.test')).status,403);
 const state=await call(other,'/auth');
@@ -12,7 +12,7 @@ const suffix=Date.now().toString().slice(-7),phone='415'+suffix;
 assert.equal((await call(admin,'/pool',{action:'invite',name:'Phone Login Test',phone})).status,200);
 let d=await call(admin,'/pool');const id=d.data.pool.players.find(p=>p.phone==='+1'+phone).id;
 const grant=await call(admin,'/invite',{playerId:id});assert.equal(grant.status,200);
-const url=new URL(grant.data.url);assert.equal(url.search,'');assert.equal(url.pathname,'/sbs/');const token=new URLSearchParams(url.hash.slice(1)).get('invite');
+const url=new URL(grant.data.url);assert.equal(url.searchParams.get('game'),'2026_01');assert.equal(url.pathname,'/sbs/');const token=url.searchParams.get('login');
 assert.equal((await call(player,'/auth',{action:'player',phone,token:''})).status,401);
 assert.equal((await call(player,'/auth',{action:'player',phone:'4155550000',token})).status,401);
 const login=await call(player,'/auth',{action:'player',phone,token});assert.equal(login.status,200);assert.ok(login.headers.get('set-cookie').includes('HttpOnly'));assert.ok(login.headers.get('set-cookie').includes('SameSite=Lax'));assert.ok(login.headers.get('set-cookie').includes('path=/sbs/'));
@@ -26,7 +26,7 @@ assert.equal((await call(admin,'/pool',{action:'release',index})).status,200);
 const replacement=await call(admin,'/invite',{playerId:id});assert.equal(replacement.status,200);
 assert.equal((await call(player,'/pool')).status,401);
 assert.equal((await call(player,'/auth',{action:'player',phone,token})).status,401);
-const newToken=new URLSearchParams(new URL(replacement.data.url).hash.slice(1)).get('invite');assert.equal((await call(player,'/auth',{action:'player',phone,token:newToken})).status,200);
+const newToken=new URL(replacement.data.url).searchParams.get('login');assert.equal((await call(player,'/auth',{action:'player',phone,token:newToken})).status,200);
 assert.equal((await call(admin,'/pool',{action:'phone',playerId:id,phone:'650'+suffix})).status,200);assert.equal((await call(player,'/pool')).status,401);
 assert.equal((await call(admin,'/auth',{action:'logout'})).status,200);assert.equal((await call(admin,'/pool')).status,401);
 console.log('HTTP checks passed: setup, organizer login, phone+private-link login, private contacts, origin protection, simultaneous purchases, rotation, phone change, logout.');

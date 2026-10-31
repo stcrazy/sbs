@@ -2,9 +2,9 @@ import {useEffect,useState,type FormEvent} from 'react';
 import {ArrowUpRight,Grid2X2,Phone,ShieldCheck} from 'lucide-react';
 import {apiPath} from './paths';
 export default function LoginPanel({onSignedIn,error}:{onSignedIn:()=>Promise<void>;error?:string}){
- const [token,setToken]=useState(''),[setup,setSetup]=useState(''),[mode,setMode]=useState('player'),[configured,setConfigured]=useState<boolean|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const [token,setToken]=useState(''),[setup,setSetup]=useState(''),[mode,setMode]=useState(new URLSearchParams(window.location.search).has('admin')?'admin':'player'),[configured,setConfigured]=useState<boolean|null>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{
-  const captureLink=()=>{const hash=new URLSearchParams(window.location.hash.slice(1));if(hash.has('invite')){setToken(hash.get('invite')||'');setMode('player')}if(hash.has('setup')){setSetup(hash.get('setup')||'');setMode('setup')}if(hash.has('invite')||hash.has('setup'))window.history.replaceState(null,'',window.location.pathname+window.location.search);};
+  const captureLink=()=>{const hash=new URLSearchParams(window.location.hash.slice(1)),search=new URLSearchParams(window.location.search);if(hash.has('invite')||search.has('login')){setToken(hash.get('invite')||search.get('login')||'');setMode('player')}if(hash.has('setup')){setSetup(hash.get('setup')||'');setMode('setup')}if(hash.has('invite')||hash.has('setup')||search.has('login')){search.delete('login');window.history.replaceState(null,'',window.location.pathname+(search.toString()?'?'+search.toString():''));}};
   captureLink();window.addEventListener('hashchange',captureLink);
   fetch(apiPath('/api/auth'),{cache:'no-store'}).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error);setConfigured(d.configured);}).catch(e=>setNotice(e instanceof Error?e.message:'Could not connect to the pool.'));
   return()=>window.removeEventListener('hashchange',captureLink);

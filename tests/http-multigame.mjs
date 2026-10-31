@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+const origin='http://127.0.0.1:8091',base=origin+'/sbs/api',admin={jar:new Map()},player={jar:new Map()},guest={jar:new Map()};
+async function call(who,route,body,game='',requestOrigin=origin){const url=base+route+(game?'?game='+encodeURIComponent(game):'');const r=await fetch(url,{method:body?'POST':'GET',headers:{Cookie:[...who.jar].map(x=>x.join('=')).join('; '),...(body?{'Content-Type':'application/json',Origin:requestOrigin}:{})},...(body?{body:JSON.stringify(body)}:{})});for(const item of r.headers.getSetCookie()){const [name,value]=item.split(';')[0].split('=');if(value)who.jar.set(name,value);else who.jar.delete(name)}const data=await r.json();return {status:r.status,data};}
+async function ok(who,route,body,game=''){const result=await call(who,route,body,game);assert.equal(result.status,200,JSON.stringify(result.data));return result.data;}
+assert.deepEqual((await ok(guest,'/games')).games,[]);
+assert.equal((await call(guest,'/auth',{action:'admin',password:'bad'},'','https://elsewhere.test')).status,403);
+const auth=await ok(guest,'/auth');await ok(admin,'/auth',auth.configured?{action:'admin',password:'local-test-password-123'}:{action:'setup',key:'local-test-only-key-012345678901234567890123',password:'local-test-password-123'});
+const a=(await ok(admin,'/games',{action:'create',name:'Championship Pool',year:2026,date:'2027-02-14'})).id;assert.match(a,/^2026_\d{2}$/);
+const phone='4155550123';await ok(admin,'/pool',{action:'invite',name:'Multi-game Player',phone},a);let state=await ok(admin,'/pool',null,a),idA=state.pool.players[0].id;
+await ok(admin,'/pool',{action:'credit',playerId:idA,credits:3,cents:7500,note:'Game A payment'},a);
+const invitationA=new URL((await ok(admin,'/invite',{playerId:idA},a)).url),tokenA=invitationA.searchParams.get('login');assert.equal(invitationA.searchParams.get('game'),a);assert.equal(invitationA.hash,'');
+const b=(await ok(admin,'/games',{action:'create',name:'Thanksgiving Pool',year:2026,date:'',copyFrom:a})).id;assert.equal(Number(b.slice(5)),Number(a.slice(5))+1);
+state=await ok(admin,'/pool',null,b);const idB=state.pool.players[0].id;assert.notEqual(idB,idA);assert.equal(state.pool.players[0].phone,'+1'+phone);assert.equal(state.pool.ledger.length,0);assert.equal(Object.keys(state.pool.squares).length,0);assert.equal(state.pool.scores.length,0);
+assert.equal((await call(player,'/auth',{action:'player',phone,token:tokenA},b)).status,401);
+await ok(player,'/auth',{action:'player',phone,token:tokenA},a);assert.equal((await call(player,'/pool',null,b)).status,401);
+await ok(player,'/pool',{action:'buy',index:10,label:'Game A square',image:''},a);state=await ok(player,'/pool',null,a);assert.equal(state.me.balance,2);assert.ok(state.pool.players.every(p=>!('phone'in p)&&!('email'in p)));
+assert.ok([401,403].includes((await call(player,'/games',{action:'create',name:'Bad',year:2026})).status));
+const invitationB=new URL((await ok(admin,'/invite',{playerId:idB},b)).url);await ok(player,'/auth',{action:'player',phone,token:invitationB.searchParams.get('login')},b);
+const listing=await ok(player,'/games');assert.deepEqual(listing.games.map(g=>g.id).sort(),[a,b].sort());assert.equal(listing.admin,false);
+assert.equal((await call(player,'/pool',{action:'buy',index:10,label:'No credits'},b)).status,400);await ok(admin,'/pool',{action:'credit',playerId:idB,credits:2,cents:5000,note:'Game B payment'},b);
+const purchase={action:'buy',index:10,label:'Game B square',image:''};const race=await Promise.all([call(player,'/pool',purchase,b),call(player,'/pool',purchase,b)]);assert.deepEqual(race.map(x=>x.status).sort(),[200,400]);
+const boardA=await ok(player,'/pool',null,a),boardB=await ok(player,'/pool',null,b);assert.equal(boardA.pool.squares[10].label,'Game A square');assert.equal(boardB.pool.squares[10].label,'Game B square');assert.equal(boardA.me.balance,2);assert.equal(boardB.me.balance,1);assert.ok(boardA.pool.ledger.every(e=>e.playerId===idA));assert.ok(boardB.pool.ledger.every(e=>e.playerId===idB));
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aVf0AAAAASUVORK5CYII=','base64'),cookie=[...player.jar].map(x=>x.join('=')).join('; ');
+const upload=await fetch(base+'/image?game='+a,{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'image/png'},body:png});assert.equal(upload.status,200);const image=await upload.json();assert.equal((await call(player,image.url.replace('/api',''),null,b)).status,404);const loaded=await fetch(origin+'/sbs'+image.url+'?game='+a,{headers:{Cookie:cookie}});assert.equal(loaded.status,200);assert.deepEqual(Buffer.from(await loaded.arrayBuffer()),png);
+const settings={...boardA.pool.settings,title:'Renamed Championship',priceCents:2500};await ok(admin,'/pool',{action:'settings',settings},a);assert.equal((await ok(admin,'/games')).games.find(g=>g.id===a).name,'Renamed Championship');assert.equal((await ok(player,'/pool',null,a)).game.id,a);
+await ok(admin,'/games',{action:'archive',id:a,archived:true});assert.equal((await ok(player,'/pool',null,a)).game.archived,true);assert.equal((await call(player,'/pool',{action:'buy',index:11,label:'Blocked'},a)).status,409);assert.equal((await ok(player,'/pool',null,b)).game.archived,false);await ok(admin,'/games',{action:'archive',id:a,archived:false});
+await ok(admin,'/invite',{playerId:idA},a);assert.equal((await call(player,'/pool',null,a)).status,401);assert.equal((await call(player,'/auth',{action:'player',phone,token:tokenA},a)).status,401);assert.equal((await call(player,'/pool',null,b)).status,200);
+await ok(admin,'/pool',{action:'phone',playerId:idB,phone:'6505550123'},b);assert.equal((await call(player,'/pool',null,b)).status,401);
+await ok(admin,'/auth',{action:'logout'});assert.equal((await call(admin,'/pool',null,a)).status,401);
+console.log('Multi-game HTTP checks passed: names and stable codes, copied contacts, private links, cookie isolation, separate credits/squares/ledgers, concurrent purchases, rename, archive/restore, game-scoped revocation, and logout.');
