@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 const origin='http://127.0.0.1:8091',base=origin+'/sbs/api',admin={jar:new Map()},player={jar:new Map()},guest={jar:new Map()};
-async function call(who,route,body,game='',requestOrigin=origin){const url=base+route+(game?'?game='+encodeURIComponent(game):'');const r=await fetch(url,{method:body?'POST':'GET',headers:{Cookie:[...who.jar].map(x=>x.join('=')).join('; '),...(body?{'Content-Type':'application/json',Origin:requestOrigin}:{})},...(body?{body:JSON.stringify(body)}:{})});for(const item of r.headers.getSetCookie()){const [name,value]=item.split(';')[0].split('=');if(value)who.jar.set(name,value);else who.jar.delete(name)}const data=await r.json();return {status:r.status,data};}
+async function call(who,route,body,game='',requestOrigin=origin){const url=base+route+(game?'?game='+encodeURIComponent(game):'');const r=await fetch(url,{method:body?'POST':'GET',headers:{Cookie:[...who.jar].map(x=>x.join('=')).join('; '),...(body?{'Content-Type':'application/json',Origin:requestOrigin}:{})},...(body?{body:JSON.stringify(body)}:{})});for(const item of r.headers.getSetCookie()){const [name,value]=item.split(';')[0].split('=');if(value&&!/Max-Age=0(?:;|$)/i.test(item))who.jar.set(name,value);else who.jar.delete(name)}const data=await r.json();return {status:r.status,data};}
 async function ok(who,route,body,game=''){const result=await call(who,route,body,game);assert.equal(result.status,200,JSON.stringify(result.data));return result.data;}
 assert.deepEqual((await ok(guest,'/games')).games,[]);
 assert.equal((await call(guest,'/auth',{action:'admin',password:'bad'},'','https://elsewhere.test')).status,403);
@@ -19,7 +19,7 @@ const invitationB=new URL((await ok(admin,'/invite',{playerId:idB,credits:0},b))
 const listing=await ok(player,'/games');assert.deepEqual(listing.games.map(g=>g.id).sort(),[a,b].sort());assert.equal(listing.admin,false);
 assert.equal((await call(player,'/pool',{action:'buy',index:10,label:'No credits'},b)).status,400);await ok(admin,'/pool',{action:'credit',playerId:idB,credits:2,cents:5000,note:'Game B payment'},b);
 const purchase={action:'buy',index:10,label:'Game B square',image:''};const race=await Promise.all([call(player,'/pool',purchase,b),call(player,'/pool',purchase,b)]);assert.deepEqual(race.map(x=>x.status).sort(),[200,400]);
-const boardA=await ok(player,'/pool',null,a),boardB=await ok(player,'/pool',null,b);assert.equal(boardA.pool.squares[10].label,'Game A square');assert.equal(boardB.pool.squares[10].label,'Game B square');assert.equal(boardA.me.balance,2);assert.equal(boardB.me.balance,1);assert.ok(boardA.pool.ledger.every(e=>e.playerId===idA));assert.ok(boardB.pool.ledger.every(e=>e.playerId===idB));
+const boardA=await ok(player,'/pool',null,a),boardB=await ok(player,'/pool',null,b);assert.equal(boardA.pool.squares[10].label,'Multi-game Player');assert.equal(boardB.pool.squares[10].label,'Multi-game Player');assert.equal(boardA.me.balance,2);assert.equal(boardB.me.balance,1);assert.ok(boardA.pool.ledger.every(e=>e.playerId===idA));assert.ok(boardB.pool.ledger.every(e=>e.playerId===idB));
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aVf0AAAAASUVORK5CYII=','base64'),cookie=[...player.jar].map(x=>x.join('=')).join('; ');
 const upload=await fetch(base+'/image?game='+a,{method:'POST',headers:{Cookie:cookie,Origin:origin,'Content-Type':'image/png'},body:png});assert.equal(upload.status,200);const image=await upload.json();assert.equal((await call(player,image.url.replace('/api',''),null,b)).status,404);const loaded=await fetch(origin+'/sbs'+image.url+'?game='+a,{headers:{Cookie:cookie}});assert.equal(loaded.status,200);assert.deepEqual(Buffer.from(await loaded.arrayBuffer()),png);
 const settings={...boardA.pool.settings,title:'Renamed Championship',priceCents:2500};await ok(admin,'/pool',{action:'settings',settings},a);assert.equal((await ok(admin,'/games')).games.find(g=>g.id===a).name,'Renamed Championship');assert.equal((await ok(player,'/pool',null,a)).game.id,a);
@@ -32,5 +32,12 @@ assert.equal((await ok(admin,'/invite',{playerId:invited.id},b)).balance,5);
 assert.equal((await ok(admin,'/invite',{playerId:invited.id,credits:5},b)).balance,5);
 const granted=(await ok(admin,'/pool',null,b)).pool.ledger.filter(e=>e.playerId===invited.id);
 assert.equal(granted.length,1);assert.equal(granted[0].dollars,0);
+const ownLink=await ok(admin,'/invite',{playerId:invited.id,credits:0},b);
+await ok(admin,'/auth',{action:'player',phone:'4155550198',token:new URL(ownLink.url).searchParams.get('login')},b);
+const playerView=await ok(admin,'/pool',null,b);assert.equal(playerView.admin,false);assert.equal(playerView.me.id,invited.id);assert.ok(!admin.jar.has('sbs_session'));
+assert.equal((await call(admin,'/pool',{action:'buy',index:12,playerId:idB,label:'Wrong account'},b)).status,403);
+assert.equal((await call(admin,'/pool',{action:'personalize',index:10,playerId:invited.id,label:'Not mine'},b)).status,400);
+assert.ok([401,403].includes((await call(admin,'/games',{action:'create',name:'Unauthorized',year:2026})).status));
+await ok(admin,'/auth',{action:'admin',password:'local-test-password-123'});
 await ok(admin,'/auth',{action:'logout'});assert.equal((await call(admin,'/pool',null,a)).status,401);
 console.log('Multi-game HTTP checks passed: names and stable codes, copied contacts, private links, cookie isolation, separate credits/squares/ledgers, concurrent purchases, rename, archive/restore, game-scoped revocation, and logout.');

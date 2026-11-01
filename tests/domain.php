@@ -30,3 +30,8 @@ echo 'All PHP domain checks passed.'.PHP_EOL;
 
 $f=fresh_pool();$f=mutate_pool($f,$admin,['action'=>'invite','name'=>'Invited','phone'=>'4155550199']);$fid=$f['players'][0]['id'];$f=grant_invite_credits($f,$fid);check(balance_for($f,$fid)===5,'invitation defaults to five credits');check($f['ledger'][0]['dollars']===0,'invitation credits record no payment');$f=grant_invite_credits($f,$fid,5);check(balance_for($f,$fid)===5&&count($f['ledger'])===1,'replacement invitation never grants twice');
 rejects(fn()=>grant_invite_credits($f,$fid,-1),'negative invitation grant denied');
+
+rejects(fn()=>mutate_pool($p,$user,['action'=>'buy','index'=>1,'playerId'=>'another-player','label'=>'Bad']),'player cannot choose another credit account');
+rejects(fn()=>mutate_pool($p,$user,['action'=>'personalize','index'=>1,'playerId'=>'another-player','label'=>'Bad']),'player cannot edit another account');
+
+check($p['squares'][47]['label']==='Test Player','square name always follows its owner');

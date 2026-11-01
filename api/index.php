@@ -24,6 +24,8 @@ try{
    $token=txt($b['token']??'',100);$number='';try{$number=phone(txt($b['phone']??'',40));}catch(Throwable $ignored){}
    $grant=query('SELECT * FROM sbs_game_invites WHERE game_id=? AND token_hash=?',[$game,hash('sha256',$token)])->fetch();
    if(!$grant||!preg_match('/^[A-Za-z0-9_-]{43}$/',$token)||!$number||!hash_equals($grant['phone'],$number)||(int)$grant['expires_at']<=time())throw new RuntimeException('Unable to sign in. Check your phone number or ask the organizer for a new invitation link.',401);
+   // A deliberate player sign-in exits organizer access on this device.
+   if(!empty($_COOKIE['sbs_session'])){query('DELETE FROM sbs_sessions WHERE token_hash=?',[hash('sha256',$_COOKIE['sbs_session'])]);set_session_cookie('',time()-3600);}
    create_session('player',$grant['player_id'],(int)$grant['version'],$game);respond(['ok'=>true]);
   }
   throw new RuntimeException('Unknown sign-in action.');
