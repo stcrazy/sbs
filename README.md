@@ -10,7 +10,7 @@ The standalone build has been tested locally. Hostinger deployment, MySQL creden
 
 Requirements: PHP 8.2 or newer, MySQL with InnoDB, PDO MySQL, Fileinfo, HTTPS, and Apache/LiteSpeed `.htaccess` support. Node.js is needed only to rebuild the interface on a development machine, not to run this application on Hostinger. Built `index.html` and `assets/` are committed with the PHP API.
 
-1. In hPanel, open the existing **thetrenhailes.com** website and its **Git** section. Connect `https://github.com/stcrazy/sbs.git`. Select the branch containing this build. Set the installation directory to **sbs**, relative to the site's `public_html`. It must be an empty subfolder. Keep the main website's existing files and deployment unchanged.
+1. In hPanel, open the existing **thetrenhailes.com** website and its **Git** section. Connect `https://github.com/stcrazy/sbs.git` and select branch **codex/hostinger-pool**. In the deployment settings, set **Root directory** to **public_html/sbs**. The default `public_html` publishes the pool at the main website's root and is not the target for this app. Keep the main website's existing files and deployment unchanged.
 2. Create a dedicated MySQL database and user for the pool in hPanel. Record its database name, host, username, and password privately.
 3. Copy the contents of `scripts/config.example.php` into a file named `.sbs-config.php` **outside `public_html`**, one level above it. Typical placement:
 
@@ -27,9 +27,11 @@ Requirements: PHP 8.2 or newer, MySQL with InnoDB, PDO MySQL, Fileinfo, HTTPS, a
 
 The private configuration file and database are outside the Git update cycle. Deploying new interface/API files does not overwrite ledger records, square ownership, player sessions, or images. Back up the MySQL database regularly; it contains pool records and uploaded images.
 
+If `/sbs/` returns 403 or 404 after a successful deployment, check the Git deployment's **Root directory** first. If the pool's HTML appears at the main homepage instead, the repository was published to `public_html`; reconnect the repository with `public_html/sbs` as its target. A further GitHub push or manual redeploy to the wrong target will not correct that path. Once the target and auto-deployment are configured, pushes to the selected branch trigger deployment automatically.
+
 ## Player invitations and texting
 
-In **Organizer → Players & ledger**, enter a player's name and phone number; email is optional. U.S. numbers receive the +1 country code automatically. Each phone belongs to one player. Record payments and issue credits manually.
+In **Organizer → Players & ledger**, enter a player's name and phone number; email is optional. U.S. numbers receive the +1 country code automatically. Each phone belongs to one player. When creating an invitation, choose picking credits (default 5). These are granted once per player per game; replacing a link never grants them again. For existing players who already have credits, set the invitation grant to 0 if no extra credits are needed. Additional credits can be adjusted manually. Unused picking credits cost nothing. Amount owed is picked squares × square price minus payments received, floored at zero. Overpayments remain visible for a manual refund; square erasure never deletes payment receipts. Recording payment defaults to 0 extra credits.
 
 Click **Create invite**, then **Text invitation** on your iPhone, or **Copy invite** and paste it into Messages. Review the number and message and tap Send yourself. Private links expire after 30 days for new sign-ins. A successful sign-in lasts up to 14 days on that device. Keep invitation links private: possession of the link plus the matching phone number grants access. This is not carrier-based phone verification.
 
@@ -54,6 +56,8 @@ Player invite:  https://thetrenhailes.com/sbs/?game=2026_01&login=PRIVATE_KEY
 
 Each game has its own roster, ledger, credits, square owners/artwork, team and event logos, rules, price, payout percentages, notices, row/column draw, scores, winners, and images. Creating a game may copy contact details from another game, but never payments, credit balances, squares, invitations, scores, or uploaded artwork. Fresh invitations must be created for the new game.
 
+In **Invite a player**, paste a name and phone together into **Paste contact details**, then click **Fill player details** and review before adding. You may also import a shared `.vcf` contact card under **Or import a shared contact card**; choose one number if the contact has several. Files are parsed in the browser; only the reviewed name/number are saved when you add the player. iPhone sharing requires saving the card to Files and uploading it; direct iOS share-sheet delivery to the website is not implemented.
+
 Use **Archive** on a game card to make its board and ledger read-only. Archived games can still be viewed and printed. **Restore** reopens editing. The selector hides archived games until **Show archived** is checked; no records are deleted.
 
 The multi-game migration copies the original standalone pool into `2026_01`, preserving its records, images, and valid player sessions. Legacy tables remain intact. This migration is transactional and runs only once. Back up the database before updating an existing production installation.
@@ -64,7 +68,7 @@ In **Organizer → Text players**, write one message, select recipients, then ta
 
 One credit buys one square. Payment receipts and credits are recorded separately with a reason. A purchase records its owner and debit in the same transaction. Competing requests cannot both own the same square. Players can personalize their square before numbers lock; the organizer can release a square and return its credit.
 
-Once all 100 squares are filled, enter your drawn digits or randomize each axis. Each axis must contain 0–9 once. Locking numbers is permanent and prevents ownership/artwork changes. Enter cumulative quarter scores in order; winning intersections use each score's last digit. Payouts are marked paid manually. State any overtime rule in the house rules.
+Once all 100 squares are filled, enter your drawn digits or randomize each axis. Each axis must contain 0–9 once. Locking numbers is permanent and prevents player ownership/artwork changes. Before any scores are entered, the organizer may erase a square (returning its credit and reducing the owner’s amount owed), then assign that square to another credited player. Drawn digits stay unchanged. Refill erased squares before scoring. Once scores begin, square ownership is frozen. Enter cumulative quarter scores in order; winning intersections use each score's last digit. Payouts are marked paid manually. State any overtime rule in the house rules.
 
 Print Board targets landscape US letter with all three logos, the board, rules, and quarter results. Inspect the native print preview, disable browser headers/footers, and adjust scaling if your printer requires it. Actual printer behavior has not been verified. House rules are limited to 1,200 characters.
 

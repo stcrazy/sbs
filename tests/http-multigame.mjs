@@ -8,14 +8,14 @@ const auth=await ok(guest,'/auth');await ok(admin,'/auth',auth.configured?{actio
 const a=(await ok(admin,'/games',{action:'create',name:'Championship Pool',year:2026,date:'2027-02-14'})).id;assert.match(a,/^2026_\d{2}$/);
 const phone='4155550123';await ok(admin,'/pool',{action:'invite',name:'Multi-game Player',phone},a);let state=await ok(admin,'/pool',null,a),idA=state.pool.players[0].id;
 await ok(admin,'/pool',{action:'credit',playerId:idA,credits:3,cents:7500,note:'Game A payment'},a);
-const invitationA=new URL((await ok(admin,'/invite',{playerId:idA},a)).url),tokenA=invitationA.searchParams.get('login');assert.equal(invitationA.searchParams.get('game'),a);assert.equal(invitationA.hash,'');
+const invitationA=new URL((await ok(admin,'/invite',{playerId:idA,credits:0},a)).url),tokenA=invitationA.searchParams.get('login');assert.equal(invitationA.searchParams.get('game'),a);assert.equal(invitationA.hash,'');
 const b=(await ok(admin,'/games',{action:'create',name:'Thanksgiving Pool',year:2026,date:'',copyFrom:a})).id;assert.equal(Number(b.slice(5)),Number(a.slice(5))+1);
 state=await ok(admin,'/pool',null,b);const idB=state.pool.players[0].id;assert.notEqual(idB,idA);assert.equal(state.pool.players[0].phone,'+1'+phone);assert.equal(state.pool.ledger.length,0);assert.equal(Object.keys(state.pool.squares).length,0);assert.equal(state.pool.scores.length,0);
 assert.equal((await call(player,'/auth',{action:'player',phone,token:tokenA},b)).status,401);
 await ok(player,'/auth',{action:'player',phone,token:tokenA},a);assert.equal((await call(player,'/pool',null,b)).status,401);
 await ok(player,'/pool',{action:'buy',index:10,label:'Game A square',image:''},a);state=await ok(player,'/pool',null,a);assert.equal(state.me.balance,2);assert.ok(state.pool.players.every(p=>!('phone'in p)&&!('email'in p)));
 assert.ok([401,403].includes((await call(player,'/games',{action:'create',name:'Bad',year:2026})).status));
-const invitationB=new URL((await ok(admin,'/invite',{playerId:idB},b)).url);await ok(player,'/auth',{action:'player',phone,token:invitationB.searchParams.get('login')},b);
+const invitationB=new URL((await ok(admin,'/invite',{playerId:idB,credits:0},b)).url);await ok(player,'/auth',{action:'player',phone,token:invitationB.searchParams.get('login')},b);
 const listing=await ok(player,'/games');assert.deepEqual(listing.games.map(g=>g.id).sort(),[a,b].sort());assert.equal(listing.admin,false);
 assert.equal((await call(player,'/pool',{action:'buy',index:10,label:'No credits'},b)).status,400);await ok(admin,'/pool',{action:'credit',playerId:idB,credits:2,cents:5000,note:'Game B payment'},b);
 const purchase={action:'buy',index:10,label:'Game B square',image:''};const race=await Promise.all([call(player,'/pool',purchase,b),call(player,'/pool',purchase,b)]);assert.deepEqual(race.map(x=>x.status).sort(),[200,400]);
@@ -26,5 +26,11 @@ const settings={...boardA.pool.settings,title:'Renamed Championship',priceCents:
 await ok(admin,'/games',{action:'archive',id:a,archived:true});assert.equal((await ok(player,'/pool',null,a)).game.archived,true);assert.equal((await call(player,'/pool',{action:'buy',index:11,label:'Blocked'},a)).status,409);assert.equal((await ok(player,'/pool',null,b)).game.archived,false);await ok(admin,'/games',{action:'archive',id:a,archived:false});
 await ok(admin,'/invite',{playerId:idA},a);assert.equal((await call(player,'/pool',null,a)).status,401);assert.equal((await call(player,'/auth',{action:'player',phone,token:tokenA},a)).status,401);assert.equal((await call(player,'/pool',null,b)).status,200);
 await ok(admin,'/pool',{action:'phone',playerId:idB,phone:'6505550123'},b);assert.equal((await call(player,'/pool',null,b)).status,401);
+await ok(admin,'/pool',{action:'invite',name:'Five-credit Invite',phone:'4155550198'},b);
+const invited=(await ok(admin,'/pool',null,b)).pool.players.find(p=>p.phone==='+14155550198');
+assert.equal((await ok(admin,'/invite',{playerId:invited.id},b)).balance,5);
+assert.equal((await ok(admin,'/invite',{playerId:invited.id,credits:5},b)).balance,5);
+const granted=(await ok(admin,'/pool',null,b)).pool.ledger.filter(e=>e.playerId===invited.id);
+assert.equal(granted.length,1);assert.equal(granted[0].dollars,0);
 await ok(admin,'/auth',{action:'logout'});assert.equal((await call(admin,'/pool',null,a)).status,401);
 console.log('Multi-game HTTP checks passed: names and stable codes, copied contacts, private links, cookie isolation, separate credits/squares/ledgers, concurrent purchases, rename, archive/restore, game-scoped revocation, and logout.');

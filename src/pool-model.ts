@@ -1,5 +1,5 @@
 import { normalizePhone } from './text-links.ts';
-export type Player = { id:string; email:string; name:string; phone?:string; userId?:string; token:string };
+export type Player = { id:string; email:string; name:string; phone?:string; userId?:string; token:string; inviteCreditsGranted?:boolean };
 export type Entry = { id:string; playerId:string; credits:number; dollars:number; note:string; at:string; by:string };
 export type Square = { playerId:string; label:string; image:string; at:string };
 export type Pool = { adminId:string; settings:{ title:string; price:number; rowTeam:string; colTeam:string; rowLogo:string; colLogo:string; cornerLogo:string; rules:string; venmo:string; payouts:number[] }; players:Player[]; ledger:Entry[]; squares:Record<string,Square>; notices:{id:string; title:string; body:string; at:string}[]; rows:number[]; cols:number[]; scores:{row:number; col:number; paid:boolean}[]; };
