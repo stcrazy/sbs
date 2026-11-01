@@ -1,13 +1,12 @@
 import {useState} from 'react';
-import {Clipboard,Link,MessageCircle} from 'lucide-react';
+import {Clipboard,Share2,MessageCircle} from 'lucide-react';
 import type {Player} from './pool-model';
-import {apiPath} from './paths';
+import {currentGame} from './paths';
 import {iphoneSmsLink} from './text-links';
-export default function InviteControls({player,gameName,flash,onCreated,available,price}:{player:Player;gameName:string;flash:(text:string)=>void;onCreated:()=>Promise<void>;available:number;price:number}){
- const [link,setLink]=useState(''),[busy,setBusy]=useState(false),[credits,setCredits]=useState(5),[issued,setIssued]=useState(false),[invitedBalance,setInvitedBalance]=useState(available);
- const granted=player.inviteCreditsGranted||issued;
- const message=`Hi ${player.name}! Join ${gameName} using this game link:\n${link}\n\nYou have ${invitedBalance} picking credits available. Each square costs $${price.toFixed(2)}. You only owe for squares you pick; unused credits cost nothing. Enter your phone number to sign in.`;
- async function create(){setBusy(true);try{const r=await fetch(apiPath('/api/invite'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({playerId:player.id,credits:granted?0:credits})}),d=await r.json();if(!r.ok)throw Error(d.error);setLink(d.url);setInvitedBalance(d.balance);setIssued(true);await onCreated();flash('Invitation ready. Picking credits recorded. Players sign in with their phone number.')}catch(e){flash(e instanceof Error?e.message:'Could not create invitation.')}finally{setBusy(false)}}
- async function copy(){try{await navigator.clipboard.writeText(message);flash('Invitation message copied.')}catch{flash('Select and copy the invitation link shown below.')}}
- return <div className="invite-controls">{!granted&&<label>Credits to add with invite<input type="number" min="0" max="1000" step="1" value={credits} onChange={e=>setCredits(Number(e.target.value))} disabled={busy}/></label>}<button className="outline" disabled={busy||!player.phone||!Number.isInteger(credits)||credits<0||credits>1000} onClick={create}><Link size={14}/>{busy?'Creating…':granted?'Prepare invite':'Create invite'}</button>{link&&<><a className="primary" href={iphoneSmsLink(player.phone!,message)} target="_top"><MessageCircle size={14}/> Text invitation</a><button className="text-link" onClick={copy}><Clipboard size={13}/> Copy invite</button><input className="private-invite-link" aria-label={'Game invitation for '+player.name} value={link} readOnly onFocus={e=>e.currentTarget.select()}/></>}<small>{player.phone?granted?'Preparing another invitation keeps the balance; no extra credits are added.':'Credits are added once when you create this invitation. Unused credits cost nothing.':'Add a phone number first.'}</small></div>;
+export default function InviteControls({player,gameName,flash,available,price}:{player:Player;gameName:string;flash:(text:string)=>void;available:number;price:number}){
+ const [open,setOpen]=useState(false);
+ const url=new URL('/sbs/',window.location.origin);url.searchParams.set('game',currentGame());url.searchParams.set('phone',player.phone||'');
+ const link=url.href,message='Hi '+player.name+'! Join '+gameName+'. You have '+available+' picking credits. Squares are $'+price.toFixed(2)+' each; you only owe for squares picked. This link signs you in automatically.\n'+link;
+ async function share(){if(navigator.share){try{await navigator.share({title:gameName,text:'Hi '+player.name+'! Your game link signs you in automatically.',url:link});return;}catch(e){if(e instanceof Error&&e.name==='AbortError')return;}}setOpen(!open);}
+ return <div className="share-player-link"><button className="outline" disabled={!player.phone} onClick={share}><Share2 size={14}/> Share link</button>{open&&<div className="share-options"><a className="primary" href={iphoneSmsLink(player.phone!,message)} target="_top"><MessageCircle size={14}/> Text link</a><button className="text-link" onClick={async()=>{try{await navigator.clipboard.writeText(link);flash('Player sign-in link copied.');}catch{flash('Select and copy the link below.');}}}><Clipboard size={13}/> Copy link</button><input aria-label={'Sign-in link for '+player.name} value={link} readOnly onFocus={e=>e.currentTarget.select()}/></div>}</div>;
 }
