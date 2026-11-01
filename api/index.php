@@ -21,9 +21,14 @@ try{
   }
   if($action==='admin'){$row=query('SELECT password_hash FROM sbs_admin WHERE id=1')->fetch();$password=txt($b['password']??'',200);if(!$row||!password_verify($password,$row['password_hash']))throw new RuntimeException('Unable to sign in. Check your password.',401);create_session('admin');respond(['ok'=>true]);}
   if($action==='player'){
-   $token=txt($b['token']??'',100);$number='';try{$number=phone(txt($b['phone']??'',40));}catch(Throwable $ignored){}
-   $grant=query('SELECT * FROM sbs_game_invites WHERE game_id=? AND token_hash=?',[$game,hash('sha256',$token)])->fetch();
-   if(!$grant||!preg_match('/^[A-Za-z0-9_-]{43}$/',$token)||!$number||!hash_equals($grant['phone'],$number)||(int)$grant['expires_at']<=time())throw new RuntimeException('Unable to sign in. Check your phone number or ask the organizer for a new invitation link.',401);
+   $number='';try{$number=phone(txt($b['phone']??'',40));}catch(Throwable $ignored){}
+   start_transaction();try{
+    $record=load_pool(true,$game);$contact=null;if($record&&$number)foreach($record['pool']['players'] as $person)if(($person['phone']??'')===$number)$contact=$person;
+    if(!$contact)throw new RuntimeException('That phone number is not on this game’s player list. Check the number or ask Shawn to add you.',401);
+    $grant=query('SELECT * FROM sbs_game_invites WHERE game_id=? AND player_id=?',[$game,$contact['id']])->fetch();
+    if(!$grant){$grant=['player_id'=>$contact['id'],'version'=>1];query('INSERT INTO sbs_game_invites (game_id,player_id,token_hash,phone,version,expires_at) VALUES (?,?,?,?,?,?)',[$game,$contact['id'],hash('sha256',new_token()),$number,1,0]);}
+    commit_transaction();
+   }catch(Throwable $e){rollback_transaction();throw $e;}
    // A deliberate player sign-in exits organizer access on this device.
    if(!empty($_COOKIE['sbs_session'])){query('DELETE FROM sbs_sessions WHERE token_hash=?',[hash('sha256',$_COOKIE['sbs_session'])]);set_session_cookie('',time()-3600);}
    create_session('player',$grant['player_id'],(int)$grant['version'],$game);respond(['ok'=>true]);
@@ -59,8 +64,13 @@ try{
    save_pool($p,$record['revision'],$game);commit_transaction();}catch(Throwable $e){rollback_transaction();throw $e;}respond(['ok'=>true]);
  }
  if($route==='invite'&&$method==='POST'){
-  require_user(true,$game);$b=request_json();start_transaction();try{$record=load_pool(true,$game);if($record['game']['archived'])throw new RuntimeException('This game is archived.',409);$player=null;foreach($record['pool']['players'] as $x)if($x['id']===($b['playerId']??''))$player=$x;if(!$player||empty($player['phone']))throw new RuntimeException('Add a phone number for this player first.');$updated=grant_invite_credits($record['pool'],$player['id'],$b['credits']??5);save_pool($updated,$record['revision'],$game);$old=query('SELECT version FROM sbs_game_invites WHERE game_id=? AND player_id=?',[$game,$player['id']])->fetch();$version=($old?(int)$old['version']:0)+1;$token=new_token();$expires=time()+30*86400;query('DELETE FROM sbs_game_invites WHERE game_id=? AND player_id=?',[$game,$player['id']]);query('INSERT INTO sbs_game_invites (game_id,player_id,token_hash,phone,version,expires_at) VALUES (?,?,?,?,?,?)',[$game,$player['id'],hash('sha256',$token),$player['phone'],$version,$expires]);query('DELETE FROM sbs_game_sessions WHERE game_id=? AND player_id=?',[$game,$player['id']]);commit_transaction();}catch(Throwable $e){rollback_transaction();throw $e;}
-  respond(['url'=>rtrim(config()['site_url'],'/').'/?game='.rawurlencode($game).'&login='.rawurlencode($token),'expiresAt'=>gmdate('c',$expires),'balance'=>balance_for($updated,$player['id'])]);
+  require_user(true,$game);$b=request_json();start_transaction();try{
+   $record=load_pool(true,$game);if($record['game']['archived'])throw new RuntimeException('This game is archived.',409);
+   $player=null;foreach($record['pool']['players'] as $x)if($x['id']===($b['playerId']??''))$player=$x;
+   if(!$player||empty($player['phone']))throw new RuntimeException('Add a phone number for this player first.');
+   $updated=grant_invite_credits($record['pool'],$player['id'],$b['credits']??5);save_pool($updated,$record['revision'],$game);commit_transaction();
+  }catch(Throwable $e){rollback_transaction();throw $e;}
+  respond(['url'=>rtrim(config()['site_url'],'/').'/?game='.rawurlencode($game).'&player=1','balance'=>balance_for($updated,$player['id'])]);
  }
  if($route==='image'&&$method==='POST'){
   if($record['game']['archived'])throw new RuntimeException('This game is archived.',409);$bytes=file_get_contents('php://input',false,null,0,524289);if(strlen($bytes)>524288)throw new RuntimeException('Image must be under 512 KB.',413);$type=(new finfo(FILEINFO_MIME_TYPE))->buffer($bytes);if(!in_array($type,['image/png','image/jpeg','image/webp'],true)||!@getimagesizefromstring($bytes))throw new RuntimeException('Choose a valid PNG, JPEG, or WebP image.');$id=uuid();$s=db()->prepare('INSERT INTO sbs_game_images (game_id,id,content_type,body) VALUES (?,?,?,?)');$s->bindValue(1,$game);$s->bindValue(2,$id);$s->bindValue(3,$type);$s->bindValue(4,$bytes,PDO::PARAM_LOB);$s->execute();respond(['url'=>'/api/image/'.$id]);

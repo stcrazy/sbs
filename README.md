@@ -1,6 +1,6 @@
 # Super Bowl Squares · thetrenhailes.com/sbs
 
-A private, phone-based football pool for Hostinger PHP/MySQL hosting, supporting multiple independently managed games. Players open an individual game invitation that the organizer texts manually, enter their phone number, and stay signed in on that device. They need no ChatGPT account, email address, password, or automated verification text. The organizer has a separate password-protected dashboard.
+A private, phone-based football pool for Hostinger PHP/MySQL hosting, supporting multiple independently managed games. Players open a game link, enter the phone number on that game’s roster, and stay signed in on that device. They need no ChatGPT account, email address, password, or automated verification text. The organizer has a separate password-protected dashboard.
 
 ## Deployment status
 
@@ -33,13 +33,13 @@ If `/sbs/` returns 403 or 404 after a successful deployment, check the Git deplo
 
 In **Organizer → Players & ledger**, enter a player's name and phone number; email is optional. U.S. numbers receive the +1 country code automatically. Each phone belongs to one player. When creating an invitation, choose picking credits (default 5). These are granted once per player per game; replacing a link never grants them again. For existing players who already have credits, set the invitation grant to 0 if no extra credits are needed. Additional credits can be adjusted manually. Unused picking credits cost nothing. Amount owed is picked squares × square price minus payments received, floored at zero. Overpayments remain visible for a manual refund; square erasure never deletes payment receipts. Recording payment defaults to 0 extra credits.
 
-Click **Create invite**, then **Text invitation** on your iPhone, or **Copy invite** and paste it into Messages. Review the number and message and tap Send yourself. Private links expire after 30 days for new sign-ins. A successful sign-in lasts up to 14 days on that device. Keep invitation links private: possession of the link plus the matching phone number grants access. This is not carrier-based phone verification.
+Click **Create invite** to grant the selected picking credits once, then **Text invitation** on your iPhone, or **Copy invite** and paste into Messages. Subsequent **Prepare invite** actions preserve credits and active sessions. Review the number and message and tap Send yourself. Links use ?game=2026_01&player=1 and contain no authentication secret.
 
-Creating or replacing an invitation revokes that player's previous links and sessions for the selected game. Changing a player's phone number also revokes their access to that game; create and text a new invitation afterward. Invitation tokens and session secrets are stored only as hashes in the database. New links use `?game=2026_01&login=PRIVATE_KEY`. The interface removes `login` from the address bar after capturing it and sends no referrer header. Query links can still appear in web-server logs or browser history, so keep them private. Older `#invite=...` links remain supported for the original game.
+Players sign in with their invited phone number only: no password, OTP, or private token. Anyone who knows a roster phone number can sign in as that player. Organizer access remains password-protected. Phone formats normalize to E.164; ten-digit U.S. numbers receive +1. A number must be on the selected game’s roster. Each game has an independent session. Changing a player’s phone revokes their existing sessions for that game. Player sign-in exits organizer access on that device; use **Player sign-in / Switch player** in the header.
 
 ## Multiple games and direct links
 
-Open `/sbs/` to choose among games signed into on this device. Organizers see every game; players see only games for which this browser has a valid session. Open another private invitation to add a game to the player's selection screen. The **Games** link on each board returns to the selector.
+Open `/sbs/` to choose among games signed into on this device. Organizers see every game; players see only games for which this browser has a valid session. Open another game link to add a game to the player's selection screen. The **Games** link on each board returns to the selector.
 
 The organizer can go directly to `/sbs/?admin=1` to sign in, even while a player session is active. From the selector, use **Create game** and choose its display name, year, and optional date. Codes are allocated sequentially within that year: `2026_01`, `2026_02`, and so on. The display name may be anything the organizer chooses. Rename it under that game's **Organizer → Pool setup & logos**; its code and existing links remain unchanged.
 
@@ -49,10 +49,10 @@ Examples:
 Game selection: https://thetrenhailes.com/sbs/
 Organizer login: https://thetrenhailes.com/sbs/?admin=1
 Game board:     https://thetrenhailes.com/sbs/?game=2026_01
-Player invite:  https://thetrenhailes.com/sbs/?game=2026_01&login=PRIVATE_KEY
+Player invite:  https://thetrenhailes.com/sbs/?game=2026_01&player=1
 ```
 
-`PRIVATE_KEY` is a generated random invitation secret, not a phone number. The player still enters their invited phone number. A link for one game cannot authenticate to another game, even if the same phone number appears in both rosters. Each game has a separate session cookie, allowing a player to switch among games already signed into without mixing balances.
+Game links select a board; the invited phone number selects the player. Signing into one game does not sign into another automatically. Each game has a separate session cookie, allowing a player to switch among games already signed into without mixing balances.
 
 Each game has its own roster, ledger, credits, square owners/artwork, team and event logos, rules, price, payout percentages, notices, row/column draw, scores, winners, and images. Creating a game may copy contact details from another game, but never payments, credit balances, squares, invitations, scores, or uploaded artwork. Fresh invitations must be created for the new game.
 
@@ -100,6 +100,6 @@ The server authorizes each request. Player responses include display names, boar
 
 The `api/domain.php` implementation is authoritative for the standalone server; the original TypeScript model retained under `src/` supplies shared UI types/helpers. No ChatGPT sign-in endpoint or Cloudflare binding is required by this deployment.
 
-Player invitation links always open the player sign-in screen, even if this browser is already signed in as organizer. A successful player sign-in revokes the current organizer session on that device. Players have no credit-account selector and can spend only their own credits or personalize their own squares. The server rejects another player ID in either request. Organizer access is labeled explicitly and retains assignment controls.
+Links with player=1 always open the player sign-in screen, even if this browser is already signed in as organizer. A successful player sign-in revokes the current organizer session on that device. Players have no credit-account selector and can spend only their own credits or personalize their own squares. The server rejects another player ID in either request. Organizer access is labeled explicitly and retains assignment controls.
 
 Board artwork occupies the top 80% of each picked square; the owner’s roster name always appears in the bottom 20%, including printed boards. The compact payout strip below the board always uses the full 100-square pool, independent of picked squares or received payments. The last payout/result is Final and uses the final score including overtime. Existing house rules are organizer-editable and are not overwritten by interface updates.
