@@ -5,5 +5,5 @@ if(str_starts_with($path,'/sbs/api/')){require dirname(__DIR__).'/api/index.php'
 $relative=preg_replace('~^/sbs/~','',$path);$root=realpath(dirname(__DIR__));$file=realpath($root.'/'.$relative);
 if($path==='/sbs/'||$path==='/sbs'){$file=$root.'/index.html';}
 $file=$file?realpath($file):false;
-if(!$file||!str_starts_with($file,$root.DIRECTORY_SEPARATOR)||!is_file($file)||!preg_match('~\.(?:html|js|css|svg)$~',$file)){http_response_code(404);return true;}
-header('Content-Type: '.match(pathinfo($file,PATHINFO_EXTENSION)){'html'=>'text/html; charset=utf-8','js'=>'application/javascript','css'=>'text/css','svg'=>'image/svg+xml',default=>'application/octet-stream'});readfile($file);return true;
+if(!$file||!str_starts_with($file,$root.DIRECTORY_SEPARATOR)||!is_file($file)||!preg_match('~\.(?:html|js|css|svg|png|webmanifest)$~',$file)){http_response_code(404);return true;}
+header('Content-Type: '.match(pathinfo($file,PATHINFO_EXTENSION)){'html'=>'text/html; charset=utf-8','js'=>'application/javascript','css'=>'text/css','svg'=>'image/svg+xml','png'=>'image/png','webmanifest'=>'application/manifest+json',default=>'application/octet-stream'});readfile($file);return true;

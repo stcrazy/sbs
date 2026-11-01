@@ -21,13 +21,28 @@ function mutate_pool(array $p,array $u,array $b):array{
  $a=$b['action']??'';$admin=$u['role']==='admin';$pid=$u['playerId']??'';$who=null;foreach($p['players'] as $x)if($x['id']===$pid)$who=$x;
  if(!$admin&&!$who)throw new RuntimeException('Invitation required.');
  $at=gmdate('c');$entry=function(string $id,int $credits,float $dollars,string $note)use(&$p,$u,$at){$p['ledger'][]=['id'=>uuid(),'playerId'=>$id,'credits'=>$credits,'dollars'=>$dollars,'note'=>$note,'at'=>$at,'by'=>$u['role']==='admin'?'organizer':$u['playerId']];};
+ if($a==='requestCredits'){
+  if($admin)throw new RuntimeException('Sign in as a player to request credits.');
+  if(count($p['rows']))throw new RuntimeException('The board is locked.');
+  $amount=whole($b['credits']??5,1,100);$requests=$p['creditRequests']??[];
+  foreach($requests as $r)if($r['playerId']===$pid&&$r['status']==='pending')throw new RuntimeException('You already have a pending request.');
+  $requests[]=['id'=>uuid(),'playerId'=>$pid,'credits'=>$amount,'note'=>txt($b['note']??'',200),'status'=>'pending','at'=>$at];$p['creditRequests']=$requests;return $p;
+ }
  if($a==='buy'||$a==='personalize'){
   if(!$admin&&isset($b['playerId'])&&$b['playerId']!==$pid)throw new RuntimeException('You can only use your own credits and edit your own squares.',403);
-  if(count($p['rows'])&&(!$admin||count($p['scores'])))throw new RuntimeException('The board is locked.');$i=whole($b['index']??null,0,99);if($admin){$who=null;foreach($p['players'] as $x)if($x['id']===($b['playerId']??''))$who=$x;}if(!$who)throw new RuntimeException('Choose a player.');$label=$who['name'];$image=asset($b['image']??'');
+  if(count($p['rows'])&&(!$admin||count($p['scores'])))throw new RuntimeException('The board is locked.');$i=whole($b['index']??null,0,99);if($admin){$who=null;foreach($p['players'] as $x)if($x['id']===($b['playerId']??''))$who=$x;}if(!$who)throw new RuntimeException('Choose a player.');$label=txt($b['label']??'',24);if(!$label)throw new RuntimeException('Choose a name or nickname.');$image=asset($b['image']??'');if(!$image)throw new RuntimeException('Choose an image or sign the square before confirming.');
   if($a==='buy'){if(isset($p['squares'][$i]))throw new RuntimeException('That square was just taken. Please choose another.');if(balance_for($p,$who['id'])<1)throw new RuntimeException('Not enough credits.');$entry($who['id'],-1,0,'Purchased square '.($i+1));$p['squares'][$i]=['playerId'=>$who['id'],'label'=>$label,'image'=>$image,'at'=>$at];}
   else{if(!isset($p['squares'][$i])||$p['squares'][$i]['playerId']!==$who['id'])throw new RuntimeException('This square belongs to another player.');$p['squares'][$i]['label']=$label;$p['squares'][$i]['image']=$image;}return $p;
  }
  if(!$admin)throw new RuntimeException('Organizer access required.');
+ if($a==='resolveRequest'){
+  $p['creditRequests']??=[];$found=false;foreach($p['creditRequests'] as &$r)if($r['id']===($b['requestId']??'')){
+   if($r['status']!=='pending')throw new RuntimeException('This request has already been handled.');
+   if(!is_bool($b['approve']??null))throw new RuntimeException('Choose approve or decline.');
+   $r['status']=$b['approve']?'approved':'declined';$r['resolvedAt']=$at;
+   if($b['approve']){$amount=whole($b['credits']??$r['credits'],1,1000);$entry($r['playerId'],$amount,0,'Approved credit request '.$r['id']);$r['granted']=$amount;}$found=true;break;
+  }unset($r);if(!$found)throw new RuntimeException('Request not found.');return $p;
+ }
  if($a==='invite'){$name=txt($b['name']??'',50);$number=phone(txt($b['phone']??'',40));$email=strtolower(txt($b['email']??'',254));if(!$name||!$number)throw new RuntimeException('Enter the player’s name and phone number.');if($email&&!filter_var($email,FILTER_VALIDATE_EMAIL))throw new RuntimeException('Enter a valid email or leave it blank.');foreach($p['players'] as $x)if(($x['phone']??'')===$number)throw new RuntimeException('This phone number is already assigned to a player.');if(count($p['players'])>=300)throw new RuntimeException('Player limit reached.');$id=uuid();$p['players'][]=['id'=>$id,'name'=>$name,'phone'=>$number,'email'=>$email];}
  elseif($a==='phone'){$number=phone(txt($b['phone']??'',40));$found=false;foreach($p['players'] as $x)if($number&&$x['id']!==($b['playerId']??'')&&($x['phone']??'')===$number)throw new RuntimeException('This number belongs to another player.');foreach($p['players'] as &$x)if($x['id']===($b['playerId']??'')){$x['phone']=$number;$found=true;}unset($x);if(!$found)throw new RuntimeException('Player not found.');}
  elseif($a==='credit'){$id=$b['playerId']??'';$exists=false;foreach($p['players'] as $x)if($x['id']===$id)$exists=true;if(!$exists)throw new RuntimeException('Player not found.');$credits=whole($b['credits']??null,-1000,1000);$dollars=whole($b['cents']??null,0,10000000)/100;$note=txt($b['note']??'',200);if(!$note||(!$credits&&!$dollars))throw new RuntimeException('Enter an amount and a payment or adjustment note.');if(balance_for($p,$id)+$credits<0)throw new RuntimeException('This would make the credit balance negative.');$entry($id,$credits,$dollars,$note);}

@@ -7,20 +7,20 @@ $p=mutate_pool($p,$admin,['action'=>'invite','name'=>'Test Player','phone'=>'415
 check($p['players'][0]['phone']==='+14155550123','phone-based invitations need no email');
 rejects(fn()=>mutate_pool($p,$admin,['action'=>'invite','name'=>'Duplicate','phone'=>'4155550123']),'duplicate phone denied');
 $p=mutate_pool($p,$admin,['action'=>'credit','playerId'=>$id,'credits'=>100,'cents'=>250000,'note'=>'Test payment']);
-$p=mutate_pool($p,$user,['action'=>'buy','index'=>47,'label'=>'Lucky']);
+$p=mutate_pool($p,$user,['action'=>'buy','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>47,'label'=>'Lucky']);
 check(balance_for($p,$id)===99&&$p['squares'][47]['playerId']===$id,'purchase records one owner and one credit debit');
-rejects(fn()=>mutate_pool($p,$user,['action'=>'buy','index'=>47,'label'=>'Again']),'duplicate square denied');
+rejects(fn()=>mutate_pool($p,$user,['action'=>'buy','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>47,'label'=>'Again']),'duplicate square denied');
 rejects(fn()=>mutate_pool($p,$user,['action'=>'credit','playerId'=>$id,'credits'=>1,'cents'=>0,'note'=>'Bad']),'player cannot issue credits');
 rejects(fn()=>mutate_pool($p,$user,['action'=>'phone','playerId'=>$id,'phone'=>'4155550124']),'player cannot change login number');
-rejects(fn()=>mutate_pool($p,['role'=>'player','playerId'=>'stranger'],['action'=>'buy','index'=>1,'label'=>'Bad']),'uninvited identity denied');
+rejects(fn()=>mutate_pool($p,['role'=>'player','playerId'=>'stranger'],['action'=>'buy','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>1,'label'=>'Bad']),'uninvited identity denied');
 $p=mutate_pool($p,$admin,['action'=>'release','index'=>47]);check(balance_for($p,$id)===100,'release restores credit');
 rejects(fn()=>mutate_pool($p,$admin,['action'=>'numbers','random'=>true]),'numbers require a full board');
-for($i=0;$i<100;$i++)$p=mutate_pool($p,$user,['action'=>'buy','index'=>$i,'label'=>'Square '.$i]);
+for($i=0;$i<100;$i++)$p=mutate_pool($p,$user,['action'=>'buy','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>$i,'label'=>'Square '.$i]);
 $p=mutate_pool($p,$admin,['action'=>'numbers','rows'=>range(0,9),'cols'=>range(0,9)]);check(count($p['rows'])===10,'complete board accepts unique digits');
 $p=mutate_pool($p,$admin,['action'=>'release','index'=>47]);check(!isset($p['squares'][47]),'organizer can erase after draw before scoring');
 rejects(fn()=>mutate_pool($p,$admin,['action'=>'score','quarter'=>0,'row'=>24,'col'=>17]),'cannot score a board with erased squares');
-$p=mutate_pool($p,$admin,['action'=>'buy','index'=>47,'playerId'=>$id,'label'=>'Replacement']);
-rejects(fn()=>mutate_pool($p,$user,['action'=>'personalize','index'=>47,'label'=>'Bad']),'locked squares cannot change artwork');
+$p=mutate_pool($p,$admin,['action'=>'buy','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>47,'playerId'=>$id,'label'=>'Replacement']);
+rejects(fn()=>mutate_pool($p,$user,['action'=>'personalize','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>47,'label'=>'Bad']),'locked squares cannot change artwork');
 $p=mutate_pool($p,$admin,['action'=>'score','quarter'=>0,'row'=>24,'col'=>17]);check($p['scores'][0]['row']%10===4&&$p['scores'][0]['col']%10===7,'score digits identify row 4 column 7');
 rejects(fn()=>mutate_pool($p,$admin,['action'=>'score','quarter'=>1,'row'=>0,'col'=>0]),'cumulative score cannot decrease');
 rejects(fn()=>mutate_pool($p,$admin,['action'=>'release','index'=>47]),'cannot erase after scoring starts');
@@ -31,7 +31,7 @@ echo 'All PHP domain checks passed.'.PHP_EOL;
 $f=fresh_pool();$f=mutate_pool($f,$admin,['action'=>'invite','name'=>'Invited','phone'=>'4155550199']);$fid=$f['players'][0]['id'];$f=grant_invite_credits($f,$fid);check(balance_for($f,$fid)===5,'invitation defaults to five credits');check($f['ledger'][0]['dollars']===0,'invitation credits record no payment');$f=grant_invite_credits($f,$fid,5);check(balance_for($f,$fid)===5&&count($f['ledger'])===1,'replacement invitation never grants twice');
 rejects(fn()=>grant_invite_credits($f,$fid,-1),'negative invitation grant denied');
 
-rejects(fn()=>mutate_pool($p,$user,['action'=>'buy','index'=>1,'playerId'=>'another-player','label'=>'Bad']),'player cannot choose another credit account');
-rejects(fn()=>mutate_pool($p,$user,['action'=>'personalize','index'=>1,'playerId'=>'another-player','label'=>'Bad']),'player cannot edit another account');
+rejects(fn()=>mutate_pool($p,$user,['action'=>'buy','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>1,'playerId'=>'another-player','label'=>'Bad']),'player cannot choose another credit account');
+rejects(fn()=>mutate_pool($p,$user,['action'=>'personalize','image'=>'/api/image/11111111-1111-4111-8111-111111111111','index'=>1,'playerId'=>'another-player','label'=>'Bad']),'player cannot edit another account');
 
-check($p['squares'][47]['label']==='Test Player','square name always follows its owner');
+check($p['squares'][47]['label']==='Replacement','square uses the chosen nickname');

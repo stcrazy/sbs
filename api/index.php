@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__.'/domain.php';require_once __DIR__.'/store.php';
+require_once __DIR__.'/domain.php';require_once __DIR__.'/store.php';require_once __DIR__.'/push.php';
 header('Cache-Control: no-store');header('X-Content-Type-Options: nosniff');header('Referrer-Policy: no-referrer');
 function respond(array $body,int $status=200):never{http_response_code($status);header('Content-Type: application/json; charset=utf-8');echo json_encode($body,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE);exit;}
 function request_json():array{if(stripos($_SERVER['CONTENT_TYPE']??'','application/json')!==0)throw new RuntimeException('JSON request required.',415);$raw=file_get_contents('php://input',false,null,0,20001);if(strlen($raw)>20000)throw new RuntimeException('Request too large.',413);$body=json_decode($raw,true,512,JSON_THROW_ON_ERROR);if(!is_array($body))throw new RuntimeException('Invalid request.');return $body;}
@@ -9,7 +9,7 @@ try{
  if($method!=='GET'&&$method!=='POST')throw new RuntimeException('Method not allowed.',405);
  if($method==='POST')origin_guard();
  if($route==='auth'){
-  if($method==='GET')respond(['configured'=>(bool)query('SELECT id FROM sbs_admin WHERE id=1')->fetch(),'signedIn'=>(bool)current_user($game)]);
+  if($method==='GET')respond(['configured'=>(bool)query('SELECT id FROM sbs_admin WHERE id=1')->fetch(),'signedIn'=>(bool)current_user($game),'pushAvailable'=>push_ready()]);
   $b=request_json();$action=$b['action']??'';
   if($action==='logout'){foreach($_COOKIE as $key=>$cookie){if($key==='sbs_session'){query('DELETE FROM sbs_sessions WHERE token_hash=?',[hash('sha256',$cookie)]);query('DELETE FROM sbs_game_sessions WHERE token_hash=?',[hash('sha256',$cookie)]);set_session_cookie('',time()-3600);}elseif(preg_match('/^sbs_game_(\d{4}_\d{2})$/',$key,$match)){query('DELETE FROM sbs_game_sessions WHERE token_hash=?',[hash('sha256',$cookie)]);set_session_cookie('',time()-3600,$match[1]);}}respond(['ok'=>true]);}
   rate_limit();
@@ -50,18 +50,36 @@ try{
    throw new RuntimeException('Unknown game action.');
   }catch(Throwable $e){rollback_transaction();throw $e;}
  }
+ if($route==='requests'&&$method==='GET'){require_user(true);$pending=pending_credit_requests();respond(['count'=>count($pending),'requests'=>$pending]);}
+ if($route==='push'){
+  require_user(true);
+  if($method==='GET'){if(!push_ready())respond(['available'=>false,'reason'=>'Enable PHP OpenSSL, cURL, and Mbstring in Hostinger.']);$keys=push_keys();respond(['available'=>true,'publicKey'=>$keys['public_key']]);}
+  $b=request_json();$action=$b['action']??'';
+  if($action==='subscribe'){
+   $subscription=$b['subscription']??[];if(!is_array($subscription)||!valid_push_subscription($subscription))throw new RuntimeException('Unsupported push subscription.');
+   $id=hash('sha256',$subscription['endpoint']);start_transaction();try{
+    query('SELECT id FROM sbs_admin WHERE id=1'.(db()->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' FOR UPDATE':''))->fetch();
+    if(!query('SELECT id FROM sbs_push_devices WHERE id=?',[$id])->fetch()&&(int)query('SELECT COUNT(*) FROM sbs_push_devices')->fetchColumn()>=10)throw new RuntimeException('At most 10 notification devices are supported.');
+    query('DELETE FROM sbs_push_devices WHERE id=?',[$id]);query('INSERT INTO sbs_push_devices (id,subscription,created_at) VALUES (?,?,?)',[$id,json_encode($subscription,JSON_THROW_ON_ERROR),time()]);commit_transaction();
+   }catch(Throwable $e){rollback_transaction();throw $e;}respond(['ok'=>true]);
+  }
+  $endpoint=txt($b['endpoint']??'',2048);$id=hash('sha256',$endpoint);
+  if($action==='unsubscribe'){query('DELETE FROM sbs_push_devices WHERE id=?',[$id]);respond(['ok'=>true]);}
+  if($action==='test'){respond(send_credit_push($game,true,$id));}
+  throw new RuntimeException('Unknown notification action.');
+ }
  $u=require_user(false,$game);$record=load_pool(false,$game);if(!$record)throw new RuntimeException('Game not found.',404);$p=$record['pool'];$admin=$u['role']==='admin';
  if($route==='pool'){
   if($method==='GET'){
    $me=null;foreach($p['players'] as $x)if($x['id']===$u['playerId'])$me=['id'=>$x['id'],'name'=>$x['name'],'balance'=>balance_for($p,$x['id'])];
    if(!$admin&&!$me)throw new RuntimeException('Invitation required.',403);
    $user=['name'=>$admin?'Shawn':$me['name'],'email'=>''];
-   if(!$admin){unset($p['adminId']);$p['players']=array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name']],$p['players']);$p['ledger']=array_values(array_filter($p['ledger'],fn($e)=>$e['playerId']===$u['playerId']));foreach($p['ledger'] as &$entry)unset($entry['by']);unset($entry);}
+   if(!$admin){$p['creditRequests']=array_values(array_filter($p['creditRequests']??[],fn($r)=>$r['playerId']===$u['playerId']));unset($p['adminId']);$p['players']=array_map(fn($x)=>['id'=>$x['id'],'name'=>$x['name']],$p['players']);$p['ledger']=array_values(array_filter($p['ledger'],fn($e)=>$e['playerId']===$u['playerId']));foreach($p['ledger'] as &$entry)unset($entry['by']);unset($entry);}
    $p['squares']=(object)$p['squares'];respond(['pool'=>$p,'game'=>$record['game'],'admin'=>$admin,'me'=>$me,'user'=>$user]);
   }
-  $b=request_json();start_transaction();try{$record=load_pool(true,$game);$u=require_user(false,$game);if($record['game']['archived'])throw new RuntimeException('This game is archived. Restore it from Games to make changes.',409);$before=$record['pool'];$p=mutate_pool($before,$u,$b);
+  $b=request_json();start_transaction();try{$record=load_pool(true,$game);$u=require_user(false,$game);if($record['game']['archived'])throw new RuntimeException('This game is archived. Restore it from Games to make changes.',409);$before=$record['pool'];if(in_array($b['action']??'',['buy','personalize'],true)&&!empty($b['image'])){if(!query('SELECT id FROM sbs_game_images WHERE game_id=? AND id=?',[$game,basename((string)$b['image'])])->fetch())throw new RuntimeException('Choose an image uploaded for this game.');}$p=mutate_pool($before,$u,$b);
    if(($b['action']??'')==='phone')foreach($before['players'] as $old)if($old['id']===($b['playerId']??''))foreach($p['players'] as $new)if($new['id']===$old['id']&&($old['phone']??'')!==($new['phone']??'')){query('UPDATE sbs_game_invites SET version=version+1,token_hash=?,phone=?,expires_at=0 WHERE game_id=? AND player_id=?',[hash('sha256',new_token()),$new['phone'],$game,$new['id']]);query('DELETE FROM sbs_game_sessions WHERE game_id=? AND player_id=?',[$game,$new['id']]);}
-   save_pool($p,$record['revision'],$game);commit_transaction();}catch(Throwable $e){rollback_transaction();throw $e;}respond(['ok'=>true]);
+   save_pool($p,$record['revision'],$game);commit_transaction();}catch(Throwable $e){rollback_transaction();throw $e;}if(($b['action']??'')==='requestCredits'){try{send_credit_push($game);}catch(Throwable $pushError){error_log('SBS push delivery failed; request remains pending.');}}respond(['ok'=>true]);
  }
  if($route==='invite'&&$method==='POST'){
   require_user(true,$game);$b=request_json();start_transaction();try{

@@ -23,6 +23,8 @@ function db():PDO{
   'CREATE TABLE IF NOT EXISTS sbs_game_invites (game_id VARCHAR(7) NOT NULL, player_id VARCHAR(36) NOT NULL, token_hash VARCHAR(64) NOT NULL UNIQUE, phone VARCHAR(20) NOT NULL, version INTEGER NOT NULL, expires_at BIGINT NOT NULL, PRIMARY KEY (game_id,player_id))',
   'CREATE TABLE IF NOT EXISTS sbs_game_sessions (token_hash VARCHAR(64) PRIMARY KEY, game_id VARCHAR(7) NOT NULL, player_id VARCHAR(36) NOT NULL, invite_version INTEGER NOT NULL, expires_at BIGINT NOT NULL)',
   'CREATE TABLE IF NOT EXISTS sbs_game_images (game_id VARCHAR(7) NOT NULL, id VARCHAR(36) NOT NULL, content_type VARCHAR(30) NOT NULL, body MEDIUMBLOB NOT NULL, PRIMARY KEY (game_id,id))',
+  'CREATE TABLE IF NOT EXISTS sbs_push_keys (id INTEGER PRIMARY KEY, public_key VARCHAR(120) NOT NULL, private_key VARCHAR(120) NOT NULL)',
+  'CREATE TABLE IF NOT EXISTS sbs_push_devices (id VARCHAR(64) PRIMARY KEY, subscription TEXT NOT NULL, created_at BIGINT NOT NULL)',
   'CREATE TABLE IF NOT EXISTS sbs_migrations (id VARCHAR(40) PRIMARY KEY)'
  ] as $sql)$db->exec($sql.($db->getAttribute(PDO::ATTR_DRIVER_NAME)==='mysql'?' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4':''));
  migrate_original_game();return $db;
